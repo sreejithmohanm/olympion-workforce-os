@@ -6,6 +6,9 @@ required_files=(
   "Architecture_Realignment.md"
   ".github/workflows/ci.yml"
   "docker-compose.yml"
+  ".gitignore"
+  "LICENSE"
+  ".github/CODEOWNERS"
 )
 
 for file in "${required_files[@]}"; do

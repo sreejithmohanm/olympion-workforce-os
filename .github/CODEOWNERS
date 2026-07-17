@@ -1,0 +1,24 @@
+# CODEOWNERS
+# Each line is a file pattern followed by one or more owners.
+# Owners are automatically requested for review when a PR modifies
+# matching files.
+
+# Global owner — all files unless overridden below
+* @sreejithmohanm
+
+# Services
+/services/ @sreejithmohanm
+
+# Apps
+/apps/ @sreejithmohanm
+
+# Packages / SDK
+/packages/ @sreejithmohanm
+
+# Infrastructure
+/infra/ @sreejithmohanm
+
+# CI / Toolchain
+/.github/ @sreejithmohanm
+/scripts/ @sreejithmohanm
+/Makefile @sreejithmohanm
