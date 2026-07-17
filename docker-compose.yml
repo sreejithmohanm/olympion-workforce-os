@@ -6,6 +6,7 @@ x-service-defaults: &service-defaults
     - |
       python - <<'PY'
       import os
+      import tempfile
       from datetime import datetime, timezone
       from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -21,8 +22,10 @@ x-service-defaults: &service-defaults
                   self.end_headers()
                   return
 
-              with open(health_file, "w", encoding="utf-8") as file:
+              with tempfile.NamedTemporaryFile("w", delete=False, dir=shared_dir, encoding="utf-8") as file:
                   file.write(datetime.now(timezone.utc).isoformat())
+                  temp_file = file.name
+              os.replace(temp_file, health_file)
 
               body = f"{service_name}:ok\n".encode("utf-8")
               self.send_response(200)
@@ -39,11 +42,13 @@ x-service-defaults: &service-defaults
       - |
         python - <<'PY'
         import sys
+        import socket
+        import urllib.error
         import urllib.request
 
         try:
             response = urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=2)
-        except Exception as exc:
+        except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
             print(exc, file=sys.stderr)
             sys.exit(1)
 
