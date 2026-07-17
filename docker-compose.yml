@@ -1,19 +1,59 @@
 x-service-defaults: &service-defaults
-  image: alpine:3.20
-  command: ["sh", "-c", "echo service ready && sleep infinity"]
+  image: python:3.12-alpine
+  command:
+    - sh
+    - -c
+    - |
+      mkdir -p "/shared/$${SERVICE_NAME}"
+      printf 'ok\n' > "/shared/$${SERVICE_NAME}/health"
+      python -m http.server 8080 --directory "/shared/$${SERVICE_NAME}"
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"
+    interval: 10s
+    timeout: 3s
+    retries: 5
+    start_period: 5s
+  networks:
+    - workforce-os
+  volumes:
+    - workforce-os-shared-data:/shared
 
 services:
-  api-gateway:
+  identity-service:
     <<: *service-defaults
+    environment:
+      SERVICE_NAME: identity-service
 
-  agent-registry:
+  employee-registry:
     <<: *service-defaults
+    environment:
+      SERVICE_NAME: employee-registry
 
-  identity:
+  runtime:
     <<: *service-defaults
+    environment:
+      SERVICE_NAME: runtime
 
-  scheduler:
+  capability-gateway:
     <<: *service-defaults
+    environment:
+      SERVICE_NAME: capability-gateway
 
-  workforce-orchestrator:
+  capability-registry:
     <<: *service-defaults
+    environment:
+      SERVICE_NAME: capability-registry
+
+  audit-service:
+    <<: *service-defaults
+    environment:
+      SERVICE_NAME: audit-service
+
+networks:
+  workforce-os:
+    driver: bridge
+
+volumes:
+  workforce-os-shared-data:

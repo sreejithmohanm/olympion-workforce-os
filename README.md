@@ -13,7 +13,7 @@ Workforce OS — AI workforce platform and runtime. Powers every Digital Profess
 | Container runtime | **Docker + Docker Compose** | Local and CI parity |
 | Task runner | **GNU Make** | Thin wrapper over shell scripts |
 
-All Phase 1 services (`api-gateway`, `agent-registry`, `identity`, `scheduler`, `workforce-orchestrator`) follow this stack.
+All Phase 1 services (`identity-service`, `employee-registry`, `runtime`, `capability-gateway`, `capability-registry`, `audit-service`) follow this stack.
 
 ## Monorepo Structure
 
@@ -41,6 +41,8 @@ make build
 docker compose up -d
 docker compose ps
 ```
+
+Each container publishes a local `/health` endpoint, and all services join the same `workforce-os` network and shared `workforce-os-shared-data` volume for local integration testing.
 
 ### 4) Stop local services
 

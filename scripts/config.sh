@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
 phase1_services=(
-  "api-gateway"
-  "agent-registry"
-  "identity"
-  "scheduler"
-  "workforce-orchestrator"
+  "identity-service"
+  "employee-registry"
+  "runtime"
+  "capability-gateway"
+  "capability-registry"
+  "audit-service"
 )
 
 required_dirs=(
