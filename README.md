@@ -2,6 +2,19 @@
 
 Workforce OS — AI workforce platform and runtime. Powers every Digital Professional.
 
+## Technology Stack
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Service language | **Python 3.12** | Type-annotated, async-first |
+| Service framework | **FastAPI** | OpenAPI spec auto-generated |
+| Package manager | **uv** | Fast Python package resolver |
+| Linter / formatter | **Ruff** | Single tool for lint + format |
+| Container runtime | **Docker + Docker Compose** | Local and CI parity |
+| Task runner | **GNU Make** | Thin wrapper over shell scripts |
+
+All Phase 1 services (`api-gateway`, `agent-registry`, `identity`, `scheduler`, `workforce-orchestrator`) follow this stack.
+
 ## Monorepo Structure
 
 The repository is initialized according to `./Architecture_Realignment.md`.
