@@ -1,20 +1,19 @@
+x-service-defaults: &service-defaults
+  image: alpine:3.20
+  command: ["sh", "-c", "echo service ready && sleep infinity"]
+
 services:
   api-gateway:
-    image: alpine:3.20
-    command: ["sh", "-c", "echo api-gateway ready && sleep infinity"]
+    <<: *service-defaults
 
   agent-registry:
-    image: alpine:3.20
-    command: ["sh", "-c", "echo agent-registry ready && sleep infinity"]
+    <<: *service-defaults
 
   identity:
-    image: alpine:3.20
-    command: ["sh", "-c", "echo identity ready && sleep infinity"]
+    <<: *service-defaults
 
   scheduler:
-    image: alpine:3.20
-    command: ["sh", "-c", "echo scheduler ready && sleep infinity"]
+    <<: *service-defaults
 
   workforce-orchestrator:
-    image: alpine:3.20
-    command: ["sh", "-c", "echo workforce-orchestrator ready && sleep infinity"]
+    <<: *service-defaults
