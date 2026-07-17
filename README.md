@@ -4,7 +4,7 @@ Workforce OS — AI workforce platform and runtime. Powers every Digital Profess
 
 ## Monorepo Structure
 
-The repository is initialized according to `/home/runner/work/olympion-workforce-os/olympion-workforce-os/Architecture_Realignment.md`.
+The repository is initialized according to `./Architecture_Realignment.md`.
 
 ## Local Development Setup
 
