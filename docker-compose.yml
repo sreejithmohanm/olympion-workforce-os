@@ -25,7 +25,11 @@ x-service-defaults: &service-defaults
               with tempfile.NamedTemporaryFile("w", delete=False, dir=shared_dir, encoding="utf-8") as file:
                   file.write(datetime.now(timezone.utc).isoformat())
                   temp_file = file.name
-              os.replace(temp_file, health_file)
+              try:
+                  os.replace(temp_file, health_file)
+              except OSError:
+                  os.unlink(temp_file)
+                  raise
 
               body = f"{service_name}:ok\n".encode("utf-8")
               self.send_response(200)
