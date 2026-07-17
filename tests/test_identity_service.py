@@ -60,7 +60,7 @@ def request_json(base_url: str, method: str, path: str, payload: dict[str, objec
 class IdentityServiceIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = MutableClock(datetime(2026, 7, 17, tzinfo=UTC))
-        self.store = APIKeyStore(hash_secret="test-api-key-secret", now=self.clock.now)
+        self.store = APIKeyStore(now=self.clock.now)
         self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=3600, now=self.clock.now)
 
     def test_create_key_and_issue_token_returns_required_claims(self) -> None:

@@ -10,7 +10,7 @@ from tests.test_identity_service import MutableClock
 class AuthUtilityUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = MutableClock(datetime(2026, 7, 17, tzinfo=UTC))
-        self.store = APIKeyStore(hash_secret="test-api-key-secret", now=self.clock.now)
+        self.store = APIKeyStore(now=self.clock.now)
         self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=60, now=self.clock.now)
 
     def test_api_keys_are_stored_hashed_and_validate(self) -> None:

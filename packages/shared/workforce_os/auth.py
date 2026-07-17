@@ -40,6 +40,7 @@ class APIKeyRecord:
     name: str
     tenant_id: str
     subject: str
+    key_salt: str
     key_hash: str
     created_at: str
     last_used_at: str | None = None
@@ -56,14 +57,10 @@ class AuthorizationError(ValueError):
 class APIKeyStore:
     def __init__(
         self,
-        hash_secret: str | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
-        self._hash_secret = (hash_secret or os.environ.get("WORKFORCE_OS_API_KEY_HASH_SECRET") or "development-api-key-secret").encode(
-            "utf-8"
-        )
         self._now = now or _utc_now
-        self._records_by_hash: dict[str, APIKeyRecord] = {}
+        self._records_by_id: dict[str, APIKeyRecord] = {}
 
     def create_key(self, *, tenant_id: str, subject: str, name: str = "default") -> tuple[APIKeyRecord, str]:
         tenant_id = tenant_id.strip()
@@ -74,32 +71,53 @@ class APIKeyStore:
         if not subject:
             raise ValueError("sub is required")
 
-        api_key = f"wfos_{secrets.token_urlsafe(32)}"
+        key_id = uuid.uuid4().hex
+        secret = secrets.token_urlsafe(32)
+        salt = os.urandom(16)
         record = APIKeyRecord(
-            key_id=uuid.uuid4().hex,
+            key_id=key_id,
             name=name,
             tenant_id=tenant_id,
             subject=subject,
-            key_hash=self._hash_key(api_key),
+            key_salt=_base64url_encode(salt),
+            key_hash=self._hash_key(secret, salt),
             created_at=self._timestamp(),
         )
-        self._records_by_hash[record.key_hash] = record
-        return record, api_key
+        self._records_by_id[record.key_id] = record
+        return record, f"wfos_{record.key_id}.{secret}"
 
     def validate_key(self, api_key: str) -> APIKeyRecord | None:
         if not api_key:
             return None
 
-        key_hash = self._hash_key(api_key)
-        record = self._records_by_hash.get(key_hash)
-        if record is None or not hmac.compare_digest(record.key_hash, key_hash):
+        key_id, secret = self._parse_api_key(api_key)
+        if not key_id or not secret:
+            return None
+
+        record = self._records_by_id.get(key_id)
+        if record is None:
+            return None
+
+        expected_hash = self._hash_key(secret, _base64url_decode(record.key_salt))
+        if not hmac.compare_digest(record.key_hash, expected_hash):
             return None
 
         record.last_used_at = self._timestamp()
         return record
 
-    def _hash_key(self, api_key: str) -> str:
-        return hmac.new(self._hash_secret, api_key.encode("utf-8"), hashlib.sha256).hexdigest()
+    def _hash_key(self, secret: str, salt: bytes) -> str:
+        return _base64url_encode(hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt, 600_000))
+
+    def _parse_api_key(self, api_key: str) -> tuple[str | None, str | None]:
+        prefix, _, remainder = api_key.partition("_")
+        if prefix != "wfos" or not remainder:
+            return None, None
+
+        key_id, separator, secret = remainder.partition(".")
+        if not separator or not key_id or not secret:
+            return None, None
+
+        return key_id, secret
 
     def _timestamp(self) -> str:
         return self._now().isoformat().replace("+00:00", "Z")

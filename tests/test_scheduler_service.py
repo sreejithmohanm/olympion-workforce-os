@@ -12,7 +12,7 @@ from tests.test_identity_service import MutableClock, request_json, serve
 class SchedulerServiceIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = MutableClock(datetime(2026, 7, 17, tzinfo=UTC))
-        self.store = APIKeyStore(hash_secret="test-api-key-secret", now=self.clock.now)
+        self.store = APIKeyStore(now=self.clock.now)
         self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=3600, now=self.clock.now)
 
     def _issue_token(self, tenant_id: str = "tenant-a", subject: str = "service-client") -> str:
