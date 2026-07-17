@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-grep -q "api-gateway:" docker-compose.yml
-grep -q "agent-registry:" docker-compose.yml
-grep -q "identity:" docker-compose.yml
-grep -q "scheduler:" docker-compose.yml
-grep -q "workforce-orchestrator:" docker-compose.yml
+source "$(dirname "$0")/config.sh"
+
+for service in "${phase1_services[@]}"; do
+  grep -q "${service}:" docker-compose.yml
+done
 
 echo "Build checks passed."
