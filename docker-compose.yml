@@ -31,9 +31,6 @@ x-service-defaults: &service-defaults
               self.end_headers()
               self.wfile.write(body)
 
-          def log_message(self, format_string, *args):
-              return
-
       HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
       PY
   healthcheck:
@@ -46,7 +43,8 @@ x-service-defaults: &service-defaults
 
         try:
             response = urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=2)
-        except Exception:
+        except Exception as exc:
+            print(exc, file=sys.stderr)
             sys.exit(1)
 
         sys.exit(0 if response.status == 200 else 1)
