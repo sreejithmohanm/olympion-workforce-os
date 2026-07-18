@@ -63,16 +63,22 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
         self.store = APIKeyStore(now=self.clock.now)
         self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=3600, now=self.clock.now)
 
+    def _admin_headers(self, tenant_id: str = "tenant-a", subject: str = "admin") -> dict[str, str]:
+        token, _ = self.signer.issue_token(tenant_id=tenant_id, subject=subject)
+        return {"Authorization": "Bearer " + token}
+
     def test_create_key_and_issue_token_returns_required_claims(self) -> None:
         with serve(create_app(store=self.store, signer=self.signer)) as base_url:
             status, created = request_json(
                 base_url,
                 "POST",
                 "/v1/auth/keys",
-                {"name": "integration", "sub": "service-client", "tenant_id": "tenant-a"},
+                {"name": "integration", "sub": "service-client"},
+                headers=self._admin_headers("tenant-a"),
             )
             self.assertEqual(status, 201)
             self.assertTrue(created["api_key"].startswith("wfos_"))
+            self.assertEqual(created["tenant_id"], "tenant-a")
 
             status, token_response = request_json(
                 base_url,
@@ -100,8 +106,138 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(response["detail"], "Invalid API key")
 
-    def test_key_creation_rejects_invalid_payload(self) -> None:
+    def test_key_creation_requires_auth(self) -> None:
         with serve(create_app(store=self.store, signer=self.signer)) as base_url:
-            status, response = request_json(base_url, "POST", "/v1/auth/keys", {"tenant_id": "tenant-a"})
-        self.assertEqual(status, 400)
-        self.assertEqual(response["detail"], "sub is required")
+            status, response = request_json(base_url, "POST", "/v1/auth/keys", {"name": "test"})
+        self.assertEqual(status, 401)
+
+    def test_create_key_defaults_sub_to_jwt_subject(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            status, created = request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "no-sub"},
+                headers=self._admin_headers("tenant-b", "caller"),
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(created["sub"], "caller")
+        self.assertEqual(created["tenant_id"], "tenant-b")
+
+    def test_list_keys_returns_metadata_only(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "key-one", "sub": "svc"},
+                headers=self._admin_headers("tenant-a"),
+            )
+            request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "key-two", "sub": "svc"},
+                headers=self._admin_headers("tenant-a"),
+            )
+            status, response = request_json(
+                base_url,
+                "GET",
+                "/v1/auth/keys",
+                headers=self._admin_headers("tenant-a"),
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(len(response["keys"]), 2)
+        for key in response["keys"]:
+            self.assertIn("id", key)
+            self.assertIn("name", key)
+            self.assertIn("created_at", key)
+            self.assertIn("last_used", key)
+            self.assertNotIn("api_key", key)
+            self.assertNotIn("key_hash", key)
+
+    def test_list_keys_scoped_to_tenant(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "a-key", "sub": "svc"},
+                headers=self._admin_headers("tenant-a"),
+            )
+            request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "b-key", "sub": "svc"},
+                headers=self._admin_headers("tenant-b"),
+            )
+            status, response = request_json(
+                base_url,
+                "GET",
+                "/v1/auth/keys",
+                headers=self._admin_headers("tenant-a"),
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(len(response["keys"]), 1)
+        self.assertEqual(response["keys"][0]["name"], "a-key")
+
+    def test_delete_key_revokes_immediately(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            _, created = request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "to-revoke", "sub": "svc"},
+                headers=self._admin_headers("tenant-a"),
+            )
+            key_id = created["id"]
+            api_key = created["api_key"]
+
+            del_status, _ = request_json(
+                base_url,
+                "DELETE",
+                f"/v1/auth/keys/{key_id}",
+                headers=self._admin_headers("tenant-a"),
+            )
+            self.assertEqual(del_status, 200)
+
+            token_status, token_response = request_json(
+                base_url,
+                "POST",
+                "/v1/auth/token",
+                {"api_key": api_key},
+            )
+        self.assertEqual(token_status, 401)
+        self.assertEqual(token_response["detail"], "Invalid API key")
+
+    def test_delete_key_returns_404_for_unknown_key(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            status, response = request_json(
+                base_url,
+                "DELETE",
+                "/v1/auth/keys/nonexistent",
+                headers=self._admin_headers("tenant-a"),
+            )
+        self.assertEqual(status, 404)
+        self.assertEqual(response["detail"], "API key not found")
+
+    def test_delete_key_returns_404_for_other_tenant_key(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            _, created = request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "private", "sub": "svc"},
+                headers=self._admin_headers("tenant-a"),
+            )
+            key_id = created["id"]
+
+            status, response = request_json(
+                base_url,
+                "DELETE",
+                f"/v1/auth/keys/{key_id}",
+                headers=self._admin_headers("tenant-b"),
+            )
+        self.assertEqual(status, 404)
+        self.assertEqual(response["detail"], "API key not found")

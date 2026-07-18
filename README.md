@@ -48,9 +48,20 @@ Each container publishes a local `/health` endpoint, and all services join the s
 
 ## Identity Service Reference Implementation
 
-- `services/identity/app.py` exposes `POST /v1/auth/keys` and `POST /v1/auth/token`
+- `services/identity/app.py` exposes `POST /v1/auth/keys`, `GET /v1/auth/keys`, `DELETE /v1/auth/keys/{id}`, and `POST /v1/auth/token`
 - `packages/shared/workforce_os/auth.py` provides reusable JWT validation middleware and tenant-scoping helpers
 - `services/scheduler/app.py` demonstrates a protected tenant-scoped endpoint that returns `401` for missing/invalid JWTs and `403` for tenant mismatches
+
+### API Key Management
+
+All `/v1/auth/keys` endpoints require a valid `Authorization: ****** header. The tenant is always scoped from the token; callers cannot create keys for other tenants.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/auth/keys` | Create an API key. Returns the raw key once; only the hash is stored. |
+| `GET` | `/v1/auth/keys` | List key metadata (`id`, `name`, `created_at`, `last_used`) for the caller's tenant. The key value is never returned. |
+| `DELETE` | `/v1/auth/keys/{id}` | Revoke a key immediately. Revoked keys are rejected within 1 second. |
+| `POST` | `/v1/auth/token` | Exchange an API key for a short-lived JWT. Public — no bearer token required. |
 
 ### 4) Stop local services
 
