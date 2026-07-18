@@ -35,6 +35,8 @@ make test
 make build
 ```
 
+`make test` now runs the repository structure checks plus the identity-service and auth middleware unit/integration test suite.
+
 ### 3) Boot Phase 1 local services
 
 ```bash
@@ -43,6 +45,12 @@ docker compose ps
 ```
 
 Each container publishes a local `/health` endpoint, and all services join the same `workforce-os` network and shared `workforce-os-shared-data` volume for local integration testing.
+
+## Identity Service Reference Implementation
+
+- `services/identity/app.py` exposes `POST /v1/auth/keys` and `POST /v1/auth/token`
+- `packages/shared/workforce_os/auth.py` provides reusable JWT validation middleware and tenant-scoping helpers
+- `services/scheduler/app.py` demonstrates a protected tenant-scoped endpoint that returns `401` for missing/invalid JWTs and `403` for tenant mismatches
 
 ### 4) Stop local services
 
