@@ -54,7 +54,7 @@ Each container publishes a local `/health` endpoint, and all services join the s
 
 ### API Key Management
 
-All `/v1/auth/keys` endpoints require a valid `Authorization: ****** header. The tenant is always scoped from the token; callers cannot create keys for other tenants.
+All `/v1/auth/keys` endpoints require a valid JWT bearer token in the `Authorization` header. The tenant is always scoped from the token; callers cannot create keys for other tenants.
 
 | Method | Path | Description |
 |--------|------|-------------|
