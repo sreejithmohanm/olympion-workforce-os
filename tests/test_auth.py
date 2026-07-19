@@ -97,7 +97,7 @@ class AuthMiddlewareContextInjectionTests(unittest.TestCase):
         self.assertEqual(self.last_status, "401 Unauthorized")
 
     def test_middleware_returns_401_for_invalid_token(self) -> None:
-        environ = self._make_environ(authorization="******")
+        environ = self._make_environ(authorization="not-a-bearer-token")
         self.middleware(environ, self._start_response)
         self.assertEqual(self.last_status, "401 Unauthorized")
 
