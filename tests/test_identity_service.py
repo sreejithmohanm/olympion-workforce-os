@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import threading
 import unittest
@@ -262,9 +263,6 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 200)
 
     def test_token_is_signed_with_rs256(self) -> None:
-        import base64
-        import json as _json
-
         with serve(create_app(store=self.store, signer=self.signer)) as base_url:
             _, created = request_json(
                 base_url,
@@ -283,7 +281,7 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
         token = token_response["access_token"]
         header_segment = token.split(".")[0]
         padding_chars = "=" * (-len(header_segment) % 4)
-        header = _json.loads(base64.urlsafe_b64decode(header_segment + padding_chars))
+        header = json.loads(base64.urlsafe_b64decode(header_segment + padding_chars))
         self.assertEqual(header["alg"], "RS256")
         self.assertEqual(header["typ"], "JWT")
 

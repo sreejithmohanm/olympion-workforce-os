@@ -150,8 +150,8 @@ class JWTSigner:
                 private_key_pem = env_pem.encode("utf-8")
 
         if private_key_pem is not None:
-            _no_pass: bytes | None = None
-            loaded = serialization.load_pem_private_key(private_key_pem, _no_pass)
+            _pem_passphrase: bytes | None = None
+            loaded = serialization.load_pem_private_key(private_key_pem, _pem_passphrase)
             if not isinstance(loaded, RSAPrivateKey):
                 raise ValueError("WORKFORCE_OS_JWT_PRIVATE_KEY_PEM must be an RSA private key")
             self._private_key: RSAPrivateKey = loaded
@@ -240,7 +240,7 @@ class JWTSigner:
         pub_numbers = self._public_key.public_numbers()
         n_bytes = pub_numbers.n.to_bytes((pub_numbers.n.bit_length() + 7) // 8, "big")
         e_bytes = pub_numbers.e.to_bytes((pub_numbers.e.bit_length() + 7) // 8, "big")
-        key_id = hashlib.sha256(n_bytes).hexdigest()[:16]
+        key_id = hashlib.sha256(n_bytes).hexdigest()
         return {
             "keys": [
                 {
