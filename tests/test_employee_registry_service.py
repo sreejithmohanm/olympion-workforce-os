@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import unittest
+import urllib.error
+import urllib.request
 from datetime import UTC, datetime
 
 import yaml
@@ -65,11 +67,10 @@ class EmployeeRegistryIntegrationTests(unittest.TestCase):
         self.assertEqual(response["status"], "available")
 
     def test_register_valid_template_yaml(self) -> None:
-        import urllib.request as _req
         yaml_body = yaml.dump(_VALID_TEMPLATE).encode("utf-8")
         token, _ = self.signer.issue_token(tenant_id="tenant-a", subject="operator")
         with serve(self._app()) as base_url:
-            request = _req.Request(
+            request = urllib.request.Request(
                 f"{base_url}/v1/catalog/templates",
                 data=yaml_body,
                 method="POST",
@@ -79,7 +80,7 @@ class EmployeeRegistryIntegrationTests(unittest.TestCase):
                     "Content-Length": str(len(yaml_body)),
                 },
             )
-            with _req.urlopen(request) as resp:
+            with urllib.request.urlopen(request) as resp:
                 status, response = resp.status, json.loads(resp.read())
         self.assertEqual(status, 201)
         self.assertEqual(response["status"], "available")
@@ -122,24 +123,19 @@ class EmployeeRegistryIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 422)
 
     def test_register_template_empty_body_returns_400(self) -> None:
-        import urllib.request as _req
         token, _ = self.signer.issue_token(tenant_id="tenant-a", subject="operator")
         with serve(self._app()) as base_url:
-            request = _req.Request(
+            request = urllib.request.Request(
                 f"{base_url}/v1/catalog/templates",
                 data=b"",
                 method="POST",
                 headers={"Authorization": "Bearer " + token},
             )
             try:
-                with _req.urlopen(request) as resp:
+                with urllib.request.urlopen(request) as resp:
                     status, response = resp.status, json.loads(resp.read())
-            except Exception as exc:
-                import urllib.error
-                if isinstance(exc, urllib.error.HTTPError):
-                    status, response = exc.code, json.loads(exc.read())
-                else:
-                    raise
+            except urllib.error.HTTPError as exc:
+                status, response = exc.code, json.loads(exc.read())
         self.assertEqual(status, 400)
 
     # ── Catalog listing ───────────────────────────────────────────────────────

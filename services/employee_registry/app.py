@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Callable, Iterable
 
@@ -11,9 +12,7 @@ import yaml
 from packages.shared.workforce_os.auth import (
     AuthContext,
     AuthMiddleware,
-    AuthorizationError,
     JWTSigner,
-    ensure_tenant_access,
     json_response,
     read_json_request,
 )
@@ -203,7 +202,6 @@ class EmployeeRegistryApp:
                 except yaml.YAMLError as exc:
                     return json_response(start_response, "400 Bad Request", {"detail": f"Invalid YAML: {exc}"})
             else:
-                import json
                 try:
                     parsed = json.loads(raw_body.decode("utf-8"))
                 except (UnicodeDecodeError, ValueError) as exc:
