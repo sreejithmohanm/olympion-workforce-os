@@ -12,6 +12,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Callable, Iterable
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
@@ -135,11 +140,28 @@ class APIKeyStore:
 class JWTSigner:
     def __init__(
         self,
-        secret: str | None = None,
+        private_key_pem: bytes | None = None,
         ttl_seconds: int | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
-        self._secret = (secret or os.environ.get("WORKFORCE_OS_JWT_SECRET") or "development-jwt-secret").encode("utf-8")
+        if private_key_pem is None:
+            env_pem = os.environ.get("WORKFORCE_OS_JWT_PRIVATE_KEY_PEM")
+            if env_pem:
+                private_key_pem = env_pem.encode("utf-8")
+
+        if private_key_pem is not None:
+            _pem_passphrase: bytes | None = None
+            loaded = serialization.load_pem_private_key(private_key_pem, _pem_passphrase)
+            if not isinstance(loaded, RSAPrivateKey):
+                raise ValueError("WORKFORCE_OS_JWT_PRIVATE_KEY_PEM must be an RSA private key")
+            self._private_key: RSAPrivateKey = loaded
+        else:
+            self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+        self._public_key: RSAPublicKey = self._private_key.public_key()
+        pub_numbers = self._public_key.public_numbers()
+        n_bytes = pub_numbers.n.to_bytes((pub_numbers.n.bit_length() + 7) // 8, "big")
+        self._kid: str = hashlib.sha256(n_bytes).hexdigest()
         self.ttl_seconds = ttl_seconds or int(os.environ.get("WORKFORCE_OS_JWT_TTL_SECONDS", "3600"))
         self._now = now or _utc_now
 
@@ -154,11 +176,11 @@ class JWTSigner:
         return self.encode(claims), self.ttl_seconds
 
     def encode(self, claims: dict[str, Any]) -> str:
-        header = {"alg": "HS256", "typ": "JWT"}
+        header = {"alg": "RS256", "kid": self._kid, "typ": "JWT"}
         header_segment = _base64url_encode(json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8"))
         claims_segment = _base64url_encode(json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf-8"))
         signing_input = f"{header_segment}.{claims_segment}".encode("ascii")
-        signature = hmac.new(self._secret, signing_input, hashlib.sha256).digest()
+        signature = self._private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
         return f"{header_segment}.{claims_segment}.{_base64url_encode(signature)}"
 
     def decode(self, token: str) -> AuthContext:
@@ -168,9 +190,15 @@ class JWTSigner:
             raise AuthenticationError("Malformed token") from exc
 
         signing_input = f"{header_segment}.{claims_segment}".encode("ascii")
-        expected_signature = _base64url_encode(hmac.new(self._secret, signing_input, hashlib.sha256).digest())
-        if not hmac.compare_digest(expected_signature, signature_segment):
-            raise AuthenticationError("Invalid token signature")
+        try:
+            self._public_key.verify(
+                _base64url_decode(signature_segment),
+                signing_input,
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        except (InvalidSignature, ValueError) as exc:
+            raise AuthenticationError("Invalid token signature") from exc
 
         try:
             header = json.loads(_base64url_decode(header_segment))
@@ -178,7 +206,7 @@ class JWTSigner:
         except (json.JSONDecodeError, ValueError) as exc:
             raise AuthenticationError("Malformed token payload") from exc
 
-        if header.get("alg") != "HS256" or header.get("typ") != "JWT":
+        if header.get("alg") != "RS256" or header.get("typ") != "JWT":
             raise AuthenticationError("Unsupported token header")
 
         required_claims = ("tenant_id", "sub", "iat", "exp")
@@ -210,6 +238,23 @@ class JWTSigner:
             raise AuthenticationError("Invalid authorization header")
 
         return self.decode(token)
+
+    def jwks(self) -> dict[str, Any]:
+        pub_numbers = self._public_key.public_numbers()
+        n_bytes = pub_numbers.n.to_bytes((pub_numbers.n.bit_length() + 7) // 8, "big")
+        e_bytes = pub_numbers.e.to_bytes((pub_numbers.e.bit_length() + 7) // 8, "big")
+        return {
+            "keys": [
+                {
+                    "alg": "RS256",
+                    "e": _base64url_encode(e_bytes),
+                    "kid": self._kid,
+                    "kty": "RSA",
+                    "n": _base64url_encode(n_bytes),
+                    "use": "sig",
+                }
+            ]
+        }
 
 
 def ensure_tenant_access(auth_context: AuthContext, tenant_id: str) -> None:

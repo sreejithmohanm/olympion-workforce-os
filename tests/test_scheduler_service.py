@@ -13,7 +13,7 @@ class SchedulerServiceIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = MutableClock(datetime(2026, 7, 17, tzinfo=UTC))
         self.store = APIKeyStore(now=self.clock.now)
-        self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=3600, now=self.clock.now)
+        self.signer = JWTSigner(ttl_seconds=3600, now=self.clock.now)
 
     def _issue_token(self, tenant_id: str = "tenant-a", subject: str = "service-client") -> str:
         admin_token, _ = self.signer.issue_token(tenant_id=tenant_id, subject="admin")
