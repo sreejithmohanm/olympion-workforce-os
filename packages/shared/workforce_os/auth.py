@@ -305,7 +305,10 @@ class AuthMiddleware:
         path = environ.get("PATH_INFO", "")
         if path not in self._public_paths:
             try:
-                environ["workforce.auth"] = self._signer.authenticate_header(environ.get("HTTP_AUTHORIZATION"))
+                auth_context = self._signer.authenticate_header(environ.get("HTTP_AUTHORIZATION"))
+                environ["workforce.auth"] = auth_context
+                environ["workforce.tenant_id"] = auth_context.tenant_id
+                environ["workforce.user_id"] = auth_context.subject
             except AuthenticationError as exc:
                 return json_response(start_response, "401 Unauthorized", {"detail": str(exc)})
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import io
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+from typing import Any
 
-from packages.shared.workforce_os.auth import APIKeyStore, AuthenticationError, JWTSigner
+from packages.shared.workforce_os.auth import APIKeyStore, AuthContext, AuthenticationError, AuthMiddleware, JWTSigner
 from tests.test_identity_service import MutableClock
 
 
@@ -33,3 +35,76 @@ class AuthUtilityUnitTests(unittest.TestCase):
         self.clock.advance(seconds=61)
         with self.assertRaisesRegex(AuthenticationError, "Token expired"):
             self.signer.decode(token)
+
+
+class AuthMiddlewareContextInjectionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.clock = MutableClock(datetime(2026, 7, 17, tzinfo=UTC))
+        self.signer = JWTSigner(ttl_seconds=60, now=self.clock.now)
+        self.captured_environ: dict[str, Any] = {}
+
+        def inner_app(environ: dict[str, Any], start_response: Any):
+            self.captured_environ = environ
+            start_response("200 OK", [("Content-Type", "application/json"), ("Content-Length", "2")])
+            return [b"{}"]
+
+        self.middleware = AuthMiddleware(inner_app, self.signer, public_paths={"/health"})
+
+    def _make_environ(self, authorization: str | None = None, path: str = "/protected") -> dict[str, Any]:
+        environ: dict[str, Any] = {
+            "REQUEST_METHOD": "GET",
+            "PATH_INFO": path,
+            "wsgi.input": io.BytesIO(b""),
+            "CONTENT_LENGTH": "0",
+        }
+        if authorization is not None:
+            environ["HTTP_AUTHORIZATION"] = authorization
+        return environ
+
+    def _start_response(self, status: str, headers: list) -> None:
+        self.last_status = status
+
+    def test_middleware_injects_tenant_id_and_user_id_into_environ(self) -> None:
+        token, _ = self.signer.issue_token(tenant_id="tenant-a", subject="svc-client")
+        environ = self._make_environ(authorization="Bearer " + token)
+        self.middleware(environ, self._start_response)
+
+        self.assertEqual(self.captured_environ.get("workforce.tenant_id"), "tenant-a")
+        self.assertEqual(self.captured_environ.get("workforce.user_id"), "svc-client")
+
+    def test_middleware_injects_auth_context_into_environ(self) -> None:
+        token, _ = self.signer.issue_token(tenant_id="tenant-a", subject="svc-client")
+        environ = self._make_environ(authorization="Bearer " + token)
+        self.middleware(environ, self._start_response)
+
+        auth = self.captured_environ.get("workforce.auth")
+        self.assertIsInstance(auth, AuthContext)
+        self.assertEqual(auth.tenant_id, "tenant-a")
+        self.assertEqual(auth.subject, "svc-client")
+
+    def test_middleware_returns_401_for_missing_token(self) -> None:
+        environ = self._make_environ()
+        self.middleware(environ, self._start_response)
+        self.assertEqual(self.last_status, "401 Unauthorized")
+        self.assertNotIn("workforce.user_id", self.captured_environ)
+        self.assertNotIn("workforce.tenant_id", self.captured_environ)
+
+    def test_middleware_returns_401_for_expired_token(self) -> None:
+        token, _ = self.signer.issue_token(tenant_id="tenant-a", subject="svc-client")
+        self.clock.advance(seconds=61)
+        environ = self._make_environ(authorization="Bearer " + token)
+        self.middleware(environ, self._start_response)
+        self.assertEqual(self.last_status, "401 Unauthorized")
+
+    def test_middleware_returns_401_for_invalid_token(self) -> None:
+        environ = self._make_environ(authorization="not-a-bearer-token")
+        self.middleware(environ, self._start_response)
+        self.assertEqual(self.last_status, "401 Unauthorized")
+
+    def test_middleware_skips_auth_for_public_paths(self) -> None:
+        environ = self._make_environ(path="/health")
+        self.middleware(environ, self._start_response)
+        self.assertEqual(self.last_status, "200 OK")
+        self.assertNotIn("workforce.auth", self.captured_environ)
+        self.assertNotIn("workforce.user_id", self.captured_environ)
+        self.assertNotIn("workforce.tenant_id", self.captured_environ)
