@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from packages.shared.workforce_os.auth import APIKeyStore, AuthContext, AuthenticationError, AuthMiddleware, JWTSigner
@@ -35,17 +35,6 @@ class AuthUtilityUnitTests(unittest.TestCase):
         self.clock.advance(seconds=61)
         with self.assertRaisesRegex(AuthenticationError, "Token expired"):
             self.signer.decode(token)
-
-
-class AuthContextTests(unittest.TestCase):
-    def test_user_id_is_alias_for_subject(self) -> None:
-        ctx = AuthContext(tenant_id="tenant-a", subject="svc-account", issued_at=0, expires_at=9999)
-        self.assertEqual(ctx.user_id, "svc-account")
-        self.assertEqual(ctx.user_id, ctx.subject)
-
-    def test_tenant_id_accessible(self) -> None:
-        ctx = AuthContext(tenant_id="tenant-b", subject="user-1", issued_at=0, expires_at=9999)
-        self.assertEqual(ctx.tenant_id, "tenant-b")
 
 
 class AuthMiddlewareContextInjectionTests(unittest.TestCase):
@@ -91,7 +80,7 @@ class AuthMiddlewareContextInjectionTests(unittest.TestCase):
         auth = self.captured_environ.get("workforce.auth")
         self.assertIsInstance(auth, AuthContext)
         self.assertEqual(auth.tenant_id, "tenant-a")
-        self.assertEqual(auth.user_id, "svc-client")
+        self.assertEqual(auth.subject, "svc-client")
 
     def test_middleware_returns_401_for_missing_token(self) -> None:
         environ = self._make_environ()
