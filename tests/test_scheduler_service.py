@@ -16,12 +16,15 @@ class SchedulerServiceIntegrationTests(unittest.TestCase):
         self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=3600, now=self.clock.now)
 
     def _issue_token(self, tenant_id: str = "tenant-a", subject: str = "service-client") -> str:
+        admin_token, _ = self.signer.issue_token(tenant_id=tenant_id, subject="admin")
+        admin_headers = {"Authorization": "Bearer " + admin_token}
         with serve(create_identity_app(store=self.store, signer=self.signer)) as base_url:
             _, created = request_json(
                 base_url,
                 "POST",
                 "/v1/auth/keys",
-                {"sub": subject, "tenant_id": tenant_id},
+                {"sub": subject},
+                headers=admin_headers,
             )
             status, token_response = request_json(
                 base_url,

@@ -86,6 +86,15 @@ class APIKeyStore:
         self._records_by_id[record.key_id] = record
         return record, f"wfos_{record.key_id}.{secret}"
 
+    def list_keys(self, tenant_id: str) -> list[APIKeyRecord]:
+        return [r for r in self._records_by_id.values() if r.tenant_id == tenant_id]
+
+    def revoke_key(self, key_id: str, tenant_id: str) -> None:
+        record = self._records_by_id.get(key_id)
+        if record is None or record.tenant_id != tenant_id:
+            raise ValueError("API key not found")
+        del self._records_by_id[key_id]
+
     def validate_key(self, api_key: str) -> APIKeyRecord | None:
         if not api_key:
             return None
