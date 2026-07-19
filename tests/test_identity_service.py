@@ -277,6 +277,7 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
                 "/v1/auth/token",
                 {"api_key": created["api_key"]},
             )
+            _, jwks_response = request_json(base_url, "GET", "/.well-known/jwks.json")
 
         token = token_response["access_token"]
         header_segment = token.split(".")[0]
@@ -284,4 +285,5 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
         header = json.loads(base64.urlsafe_b64decode(header_segment + padding_chars))
         self.assertEqual(header["alg"], "RS256")
         self.assertEqual(header["typ"], "JWT")
+        self.assertEqual(header["kid"], jwks_response["keys"][0]["kid"])
 

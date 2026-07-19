@@ -159,6 +159,9 @@ class JWTSigner:
             self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
         self._public_key: RSAPublicKey = self._private_key.public_key()
+        pub_numbers = self._public_key.public_numbers()
+        n_bytes = pub_numbers.n.to_bytes((pub_numbers.n.bit_length() + 7) // 8, "big")
+        self._kid: str = hashlib.sha256(n_bytes).hexdigest()
         self.ttl_seconds = ttl_seconds or int(os.environ.get("WORKFORCE_OS_JWT_TTL_SECONDS", "3600"))
         self._now = now or _utc_now
 
@@ -173,7 +176,7 @@ class JWTSigner:
         return self.encode(claims), self.ttl_seconds
 
     def encode(self, claims: dict[str, Any]) -> str:
-        header = {"alg": "RS256", "typ": "JWT"}
+        header = {"alg": "RS256", "kid": self._kid, "typ": "JWT"}
         header_segment = _base64url_encode(json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8"))
         claims_segment = _base64url_encode(json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf-8"))
         signing_input = f"{header_segment}.{claims_segment}".encode("ascii")
@@ -240,13 +243,12 @@ class JWTSigner:
         pub_numbers = self._public_key.public_numbers()
         n_bytes = pub_numbers.n.to_bytes((pub_numbers.n.bit_length() + 7) // 8, "big")
         e_bytes = pub_numbers.e.to_bytes((pub_numbers.e.bit_length() + 7) // 8, "big")
-        key_id = hashlib.sha256(n_bytes).hexdigest()
         return {
             "keys": [
                 {
                     "alg": "RS256",
                     "e": _base64url_encode(e_bytes),
-                    "kid": key_id,
+                    "kid": self._kid,
                     "kty": "RSA",
                     "n": _base64url_encode(n_bytes),
                     "use": "sig",
