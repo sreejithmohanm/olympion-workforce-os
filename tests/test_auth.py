@@ -11,7 +11,7 @@ class AuthUtilityUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = MutableClock(datetime(2026, 7, 17, tzinfo=UTC))
         self.store = APIKeyStore(now=self.clock.now)
-        self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=60, now=self.clock.now)
+        self.signer = JWTSigner(ttl_seconds=60, now=self.clock.now)
 
     def test_api_keys_are_stored_hashed_and_validate(self) -> None:
         record, api_key = self.store.create_key(tenant_id="tenant-a", subject="unit-test")

@@ -19,6 +19,8 @@ class IdentityServiceApp:
 
         if method == "GET" and path == "/health":
             return json_response(start_response, "200 OK", {"status": "ok"})
+        if method == "GET" and path == "/.well-known/jwks.json":
+            return json_response(start_response, "200 OK", self._signer.jwks())
         if method == "POST" and path == "/v1/auth/token":
             return self._issue_token(environ, start_response)
         if method == "POST" and path == "/v1/auth/keys":
@@ -111,7 +113,7 @@ def create_app(store: APIKeyStore | None = None, signer: JWTSigner | None = None
     return AuthMiddleware(
         IdentityServiceApp(store=store, signer=effective_signer),
         signer=effective_signer,
-        public_paths={"/health", "/v1/auth/token"},
+        public_paths={"/health", "/v1/auth/token", "/.well-known/jwks.json"},
     )
 
 

@@ -61,7 +61,7 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = MutableClock(datetime(2026, 7, 17, tzinfo=UTC))
         self.store = APIKeyStore(now=self.clock.now)
-        self.signer = JWTSigner(secret="test-jwt-secret", ttl_seconds=3600, now=self.clock.now)
+        self.signer = JWTSigner(ttl_seconds=3600, now=self.clock.now)
 
     def _admin_headers(self, tenant_id: str = "tenant-a", subject: str = "admin") -> dict[str, str]:
         token, _ = self.signer.issue_token(tenant_id=tenant_id, subject=subject)
@@ -241,3 +241,49 @@ class IdentityServiceIntegrationTests(unittest.TestCase):
             )
         self.assertEqual(status, 404)
         self.assertEqual(response["detail"], "API key not found")
+
+    def test_jwks_endpoint_returns_public_key(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            status, response = request_json(base_url, "GET", "/.well-known/jwks.json")
+        self.assertEqual(status, 200)
+        self.assertIn("keys", response)
+        self.assertEqual(len(response["keys"]), 1)
+        key = response["keys"][0]
+        self.assertEqual(key["kty"], "RSA")
+        self.assertEqual(key["alg"], "RS256")
+        self.assertEqual(key["use"], "sig")
+        self.assertIn("n", key)
+        self.assertIn("e", key)
+        self.assertIn("kid", key)
+
+    def test_jwks_endpoint_is_public(self) -> None:
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            status, response = request_json(base_url, "GET", "/.well-known/jwks.json")
+        self.assertEqual(status, 200)
+
+    def test_token_is_signed_with_rs256(self) -> None:
+        import base64
+        import json as _json
+
+        with serve(create_app(store=self.store, signer=self.signer)) as base_url:
+            _, created = request_json(
+                base_url,
+                "POST",
+                "/v1/auth/keys",
+                {"name": "rs256-test", "sub": "svc"},
+                headers=self._admin_headers("tenant-a"),
+            )
+            _, token_response = request_json(
+                base_url,
+                "POST",
+                "/v1/auth/token",
+                {"api_key": created["api_key"]},
+            )
+
+        token = token_response["access_token"]
+        header_segment = token.split(".")[0]
+        padding_chars = "=" * (-len(header_segment) % 4)
+        header = _json.loads(base64.urlsafe_b64decode(header_segment + padding_chars))
+        self.assertEqual(header["alg"], "RS256")
+        self.assertEqual(header["typ"], "JWT")
+
