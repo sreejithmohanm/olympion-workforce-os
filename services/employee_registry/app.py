@@ -338,7 +338,7 @@ class EmployeeRegistryApp:
             return json_response(start_response, "422 Unprocessable Entity", {"detail": reason})
 
         employee = EmployeeRecord(
-            id=uuid.uuid4().hex,
+            id=str(uuid.uuid4()),
             tenant_id=auth.tenant_id,
             template_name=template_name,
             template_version=template_version,
