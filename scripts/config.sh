@@ -11,7 +11,10 @@ phase1_services=(
 
 required_dirs=(
   "apps/api-gateway"
+  "api/openapi/v1"
   "apps/web-console"
+  "docs/api"
+  "sdk/typescript/src/types"
   "services/agent-registry"
   "services/identity"
   "services/scheduler"

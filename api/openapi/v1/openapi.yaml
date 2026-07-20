@@ -1,0 +1,931 @@
+openapi: 3.1.0
+info:
+  title: Olympion Workforce OS Phase 1 API
+  version: 1.0.0
+  summary: Authoritative Phase 1 contract for Experience and SDK generation.
+  description: |
+    This OpenAPI contract defines the Phase 1 Workforce OS endpoints consumed by
+    Experience. It covers the implemented identity and employee APIs plus the
+    contract-first catalog installation and employee work assignment flows that
+    frontend clients integrate against before the backing services are complete.
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+    description: Identity and API key management endpoints.
+  - name: Catalog
+    description: Template browsing and installation endpoints.
+  - name: Employees
+    description: Employee lifecycle endpoints.
+  - name: Work
+    description: Work assignment and streaming endpoints.
+paths:
+  /v1/auth/token:
+    post:
+      tags:
+        - Auth
+      operationId: exchangeApiKeyForAccessToken
+      summary: Exchange an API key for a bearer token
+      description: Exchange a Workforce OS API key for a short-lived JWT bearer token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenExchangeRequest'
+      responses:
+        '200':
+          description: API key exchange completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/keys:
+    post:
+      tags:
+        - Auth
+      operationId: createApiKey
+      summary: Create an API key
+      description: Create an API key scoped to the caller's tenant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: API key created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyWithSecret'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Auth
+      operationId: listApiKeys
+      summary: List API keys
+      description: List API key metadata for the caller's tenant. Raw key secrets are never returned.
+      responses:
+        '200':
+          description: API key metadata returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/keys/{id}:
+    delete:
+      tags:
+        - Auth
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      description: Revoke an API key for the caller's tenant.
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyId'
+      responses:
+        '200':
+          description: API key revoked successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyObject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/catalog:
+    get:
+      tags:
+        - Catalog
+      operationId: listCatalogTemplates
+      summary: List catalog templates
+      description: List the available templates that can be installed or assigned to employees.
+      responses:
+        '200':
+          description: Catalog listing returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateCollectionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/catalog/{name}/{version}:
+    get:
+      tags:
+        - Catalog
+      operationId: getCatalogTemplate
+      summary: Get a catalog template
+      description: Get the full template definition for a catalog entry.
+      parameters:
+        - $ref: '#/components/parameters/TemplateName'
+        - $ref: '#/components/parameters/TemplateVersion'
+      responses:
+        '200':
+          description: Template details returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/catalog/install:
+    post:
+      tags:
+        - Catalog
+      operationId: installCatalogTemplate
+      summary: Install a catalog template
+      description: |
+        Install a DPDL template into the catalog so it can be assigned to employees.
+        The request body may be submitted as JSON or YAML.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateInstallRequest'
+          application/yaml:
+            schema:
+              $ref: '#/components/schemas/TemplateInstallRequest'
+          text/yaml:
+            schema:
+              $ref: '#/components/schemas/TemplateInstallRequest'
+      responses:
+        '201':
+          description: Template installed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/employees:
+    post:
+      tags:
+        - Employees
+      operationId: createEmployee
+      summary: Create an employee
+      description: Create an employee from an installed template for the caller's tenant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmployeeRequest'
+      responses:
+        '201':
+          description: Employee created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Employees
+      operationId: listEmployees
+      summary: List employees
+      description: List employees for the caller's tenant with offset pagination.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Employee page returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/employees/{id}:
+    get:
+      tags:
+        - Employees
+      operationId: getEmployee
+      summary: Get an employee
+      description: Get the full employee resource for the caller's tenant.
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Employee returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Employees
+      operationId: terminateEmployee
+      summary: Terminate an employee
+      description: Soft-delete an employee by marking the employee as terminated.
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Employee terminated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/employees/{id}/work:
+    post:
+      tags:
+        - Work
+      operationId: assignEmployeeWork
+      summary: Assign work to an employee
+      description: Queue a unit of work for an employee and return resource URLs for polling or streaming progress.
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkAssignmentRequest'
+      responses:
+        '202':
+          description: Work item accepted for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/employees/{id}/work/{workId}:
+    get:
+      tags:
+        - Work
+      operationId: getEmployeeWork
+      summary: Get employee work status or stream events
+      description: |
+        Get the current work item status as JSON or request a live server-sent events
+        stream by sending `Accept: text/event-stream`.
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+        - $ref: '#/components/parameters/WorkId'
+      responses:
+        '200':
+          description: Work item status or stream returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                queued:
+                  summary: Example SSE stream
+                  value: |
+                    event: work.accepted
+                    data: {"sequence":1,"type":"work.accepted","work_id":"wrk_123","employee_id":"018f81de-3fa0-7b7c-9b69-6f5b98c8d9db","occurred_at":"2026-07-20T11:34:16Z","data":{"status":"queued"}}
+
+                    event: work.completed
+                    data: {"sequence":2,"type":"work.completed","work_id":"wrk_123","employee_id":"018f81de-3fa0-7b7c-9b69-6f5b98c8d9db","occurred_at":"2026-07-20T11:34:18Z","data":{"status":"succeeded","output":{"message":"done"}}}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Tenant-scoped JWT bearer token issued by `/v1/auth/token`.
+  parameters:
+    ApiKeyId:
+      name: id
+      in: path
+      required: true
+      description: API key identifier.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
+    EmployeeId:
+      name: id
+      in: path
+      required: true
+      description: Employee identifier.
+      schema:
+        type: string
+        format: uuid
+    TemplateName:
+      name: name
+      in: path
+      required: true
+      description: Template name.
+      schema:
+        type: string
+        minLength: 1
+    TemplateVersion:
+      name: version
+      in: path
+      required: true
+      description: Template semantic version.
+      schema:
+        type: string
+        pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9.]+)?(\+[A-Za-z0-9.]+)?$'
+    WorkId:
+      name: workId
+      in: path
+      required: true
+      description: Work item identifier.
+      schema:
+        type: string
+        minLength: 1
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of employees to return.
+      schema:
+        type: integer
+        minimum: 1
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Number of employees to skip before the current page.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+  responses:
+    BadRequest:
+      description: Request validation failed before business processing.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication failed or credentials were missing.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The caller is authenticated but not allowed to access the requested tenant or resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The requested resource could not be found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: Request validation failed during domain processing.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: The service encountered an unexpected error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+        code:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+    EmptyObject:
+      type: object
+      additionalProperties: false
+    CreateApiKeyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Optional friendly name for the key. Defaults to `default`.
+        sub:
+          type: string
+          minLength: 1
+          description: Optional subject claim to embed in exchanged access tokens. Defaults to the caller subject.
+    ApiKey:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - created_at
+        - last_used
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    ApiKeyWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/ApiKey'
+        - type: object
+          required:
+            - api_key
+            - sub
+            - tenant_id
+          properties:
+            api_key:
+              type: string
+              pattern: '^wfos_[0-9a-f]{32}\.[A-Za-z0-9_-]+$'
+            sub:
+              type: string
+            tenant_id:
+              type: string
+    ApiKeyListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - keys
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKey'
+    TokenExchangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - api_key
+      properties:
+        api_key:
+          type: string
+          pattern: '^wfos_[0-9a-f]{32}\.[A-Za-z0-9_-]+$'
+    TokenResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - access_token
+        - expires_in
+        - token_type
+      properties:
+        access_token:
+          type: string
+        expires_in:
+          type: integer
+          minimum: 1
+        token_type:
+          type: string
+          enum:
+            - ******    Guardrail:
+      oneOf:
+        - type: string
+        - type: object
+          additionalProperties: true
+    TemplateSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - version
+        - domain
+        - description
+        - status
+        - created_at
+      properties:
+        name:
+          type: string
+          minLength: 1
+        version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9.]+)?(\+[A-Za-z0-9.]+)?$'
+        domain:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          enum:
+            - available
+            - invalid
+        created_at:
+          type: string
+          format: date-time
+    TemplateDetail:
+      allOf:
+        - $ref: '#/components/schemas/TemplateSummary'
+        - type: object
+          required:
+            - capabilities
+            - guardrails
+          properties:
+            capabilities:
+              type: array
+              minItems: 1
+              items:
+                type: string
+                minLength: 1
+            guardrails:
+              type: array
+              items:
+                $ref: '#/components/schemas/Guardrail'
+            error:
+              type: string
+    TemplateInstallRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - version
+        - domain
+        - description
+        - capabilities
+      properties:
+        name:
+          type: string
+          minLength: 1
+        version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9.]+)?(\+[A-Za-z0-9.]+)?$'
+        domain:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+        capabilities:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+        guardrails:
+          type: array
+          items:
+            $ref: '#/components/schemas/Guardrail'
+    TemplateCollectionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - templates
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateSummary'
+    CreateEmployeeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - template_name
+        - template_version
+      properties:
+        template_name:
+          type: string
+          minLength: 1
+        template_version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9.]+)?(\+[A-Za-z0-9.]+)?$'
+        display_name:
+          type: string
+          minLength: 1
+    EmployeeSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - display_name
+        - status
+        - template_name
+        - template_version
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - terminated
+        template_name:
+          type: string
+        template_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        terminated_at:
+          type: string
+          format: date-time
+    Employee:
+      allOf:
+        - $ref: '#/components/schemas/EmployeeSummary'
+        - type: object
+          required:
+            - template
+          properties:
+            template:
+              $ref: '#/components/schemas/TemplateSummary'
+    EmployeeListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - employees
+        - total
+        - limit
+        - offset
+      properties:
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeSummary'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+    WorkAssignmentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - title
+        - instructions
+      properties:
+        title:
+          type: string
+          minLength: 1
+        instructions:
+          type: string
+          minLength: 1
+        input:
+          type: object
+          additionalProperties: true
+        stream:
+          type: boolean
+          default: true
+        idempotency_key:
+          type: string
+          minLength: 1
+    WorkAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - work_id
+        - employee_id
+        - status
+        - accepted_at
+        - result_url
+        - stream_url
+      properties:
+        work_id:
+          type: string
+        employee_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - queued
+        accepted_at:
+          type: string
+          format: date-time
+        result_url:
+          type: string
+        stream_url:
+          type: string
+    WorkItem:
+      type: object
+      additionalProperties: false
+      required:
+        - work_id
+        - employee_id
+        - status
+        - title
+        - instructions
+        - accepted_at
+        - stream
+        - events
+      properties:
+        work_id:
+          type: string
+        employee_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+            - cancelled
+        title:
+          type: string
+        instructions:
+          type: string
+        accepted_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        output:
+          type: object
+          additionalProperties: true
+        error:
+          $ref: '#/components/schemas/Error'
+        stream:
+          type: boolean
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkStreamEvent'
+    WorkStreamEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - sequence
+        - type
+        - work_id
+        - employee_id
+        - occurred_at
+        - data
+      properties:
+        sequence:
+          type: integer
+          minimum: 1
+        type:
+          type: string
+          enum:
+            - work.accepted
+            - work.started
+            - work.progress
+            - work.completed
+            - work.failed
+            - work.cancelled
+        work_id:
+          type: string
+        employee_id:
+          type: string
+          format: uuid
+        occurred_at:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true

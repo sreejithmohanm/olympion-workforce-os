@@ -11,5 +11,6 @@ for service in "${phase1_services[@]}"; do
 done
 
 python -m compileall packages services tests >/dev/null
+./scripts/openapi.sh check-generated
 
 echo "Build checks passed."
