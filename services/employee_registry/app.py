@@ -69,7 +69,7 @@ class CapabilityRegistry:
     """
 
     def __init__(self, capabilities: Iterable[str] | None = None) -> None:
-        self._capabilities: set[str] = {c.strip() for c in (capabilities or [])}
+        self._capabilities: set[str] = {c.strip() for c in capabilities} if capabilities is not None else set()
 
     def register(self, name: str) -> None:
         """Register a capability name."""
@@ -127,7 +127,7 @@ def _validate_dpdl(raw: dict[str, Any], capability_registry: CapabilityRegistry 
     1. DPDL schema – required fields, types, and semantic version format.
     2. Capability Registry – every capability name must exist in the registry
        (skipped when the registry is absent or empty).
-    3. Guardrail syntax – each guardrail must be a string or an object.
+    3. Guardrail syntax – each guardrail must be a string or a dict.
     """
     for req in _DPDL_REQUIRED_FIELDS:
         if req not in raw or not raw[req]:
