@@ -4,6 +4,7 @@ import json
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from datetime import UTC, datetime
 
 import yaml
@@ -303,6 +304,8 @@ class EmployeeRegistryIntegrationTests(unittest.TestCase):
         self.assertEqual(response["status"], "active")
         self.assertEqual(response["display_name"], "Alice")
         self.assertIn("template", response)
+        self.assertIn("created_at", response)
+        self.assertEqual(str(uuid.UUID(response["id"])), response["id"])
 
     def test_hire_employee_assigns_stable_uuid(self) -> None:
         with serve(self._app()) as base_url:
@@ -366,6 +369,7 @@ class EmployeeRegistryIntegrationTests(unittest.TestCase):
                 headers=self._auth_headers(),
             )
         self.assertEqual(status, 422)
+        self.assertIn("Template not found", response["detail"])
 
     def test_hire_from_invalid_template_returns_422(self) -> None:
         bad_template = {**_VALID_TEMPLATE, "name": "bad-agent", "capabilities": []}
@@ -380,6 +384,7 @@ class EmployeeRegistryIntegrationTests(unittest.TestCase):
                 headers=self._auth_headers(),
             )
         self.assertEqual(status, 422)
+        self.assertIn("invalid", response["detail"])
 
     def test_hire_employee_missing_template_name_returns_400(self) -> None:
         with serve(self._app()) as base_url:
