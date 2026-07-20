@@ -10,6 +10,7 @@ import yaml
 
 from packages.shared.workforce_os.auth import JWTSigner
 from services.employee_registry.app import (
+    CapabilityRegistry,
     EmployeeStore,
     TemplateStore,
     create_app,
@@ -138,7 +139,79 @@ class EmployeeRegistryIntegrationTests(unittest.TestCase):
                 status, response = exc.code, json.loads(exc.read())
         self.assertEqual(status, 400)
 
+    # ── Capability Registry validation ────────────────────────────────────────
+
+    def _app_with_capabilities(self, *capability_names: str):
+        registry = CapabilityRegistry(capability_names)
+        return create_app(
+            template_store=self.templates,
+            employee_store=self.employees,
+            capability_registry=registry,
+            signer=self.signer,
+            now=self.clock.now,
+        )
+
+    def test_capability_registry_is_empty_by_default(self) -> None:
+        registry = CapabilityRegistry()
+        self.assertTrue(registry.is_empty())
+
+    def test_capability_registry_register_and_contains(self) -> None:
+        registry = CapabilityRegistry()
+        registry.register("ticket-lookup")
+        self.assertTrue(registry.contains("ticket-lookup"))
+        self.assertFalse(registry.contains("unknown-cap"))
+
+    def test_capability_registry_init_with_capabilities(self) -> None:
+        registry = CapabilityRegistry(["ticket-lookup", "escalation-handler"])
+        self.assertFalse(registry.is_empty())
+        self.assertTrue(registry.contains("ticket-lookup"))
+        self.assertTrue(registry.contains("escalation-handler"))
+        self.assertFalse(registry.contains("other-cap"))
+
+    def test_register_template_unknown_capability_returns_422(self) -> None:
+        """Capability Registry check rejects templates with unregistered capability names."""
+        with serve(self._app_with_capabilities("ticket-lookup", "escalation-handler")) as base_url:
+            status, response = request_json(
+                base_url, "POST", "/v1/catalog/templates",
+                {**_VALID_TEMPLATE, "capabilities": ["unknown-capability"]},
+                headers=self._auth_headers(),
+            )
+        self.assertEqual(status, 422)
+        self.assertEqual(response["status"], "invalid")
+        self.assertIn("unknown-capability", response["detail"])
+
+    def test_register_template_known_capabilities_returns_201(self) -> None:
+        """Capability Registry check passes when all capability names are registered."""
+        with serve(self._app_with_capabilities("ticket-lookup", "escalation-handler")) as base_url:
+            status, response = request_json(
+                base_url, "POST", "/v1/catalog/templates", _VALID_TEMPLATE,
+                headers=self._auth_headers(),
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(response["status"], "available")
+
+    def test_register_template_empty_capability_registry_skips_check(self) -> None:
+        """When no capabilities are registered, the registry check is skipped."""
+        with serve(self._app_with_capabilities()) as base_url:
+            status, response = request_json(
+                base_url, "POST", "/v1/catalog/templates", _VALID_TEMPLATE,
+                headers=self._auth_headers(),
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(response["status"], "available")
+
+    def test_register_template_partial_unknown_capability_returns_422(self) -> None:
+        """Only one unknown capability is sufficient to fail the registry check."""
+        with serve(self._app_with_capabilities("ticket-lookup")) as base_url:
+            status, response = request_json(
+                base_url, "POST", "/v1/catalog/templates", _VALID_TEMPLATE,
+                headers=self._auth_headers(),
+            )
+        self.assertEqual(status, 422)
+        self.assertIn("escalation-handler", response["detail"])
+
     # ── Catalog listing ───────────────────────────────────────────────────────
+
 
     def test_list_catalog_returns_available_templates(self) -> None:
         with serve(self._app()) as base_url:

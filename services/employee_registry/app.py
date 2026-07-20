@@ -58,6 +58,32 @@ class EmployeeRecord:
     terminated_at: str | None = None
 
 
+class CapabilityRegistry:
+    """Registry of known capability names.
+
+    When non-empty, the ingestion pipeline validates that every capability
+    referenced in a DPDL template is present in this registry.  An empty
+    registry means no capability-name validation is performed (all names are
+    accepted), which preserves backward compatibility with deployments that
+    have not yet populated the registry.
+    """
+
+    def __init__(self, capabilities: Iterable[str] | None = None) -> None:
+        self._capabilities: set[str] = {c.strip() for c in capabilities} if capabilities is not None else set()
+
+    def register(self, name: str) -> None:
+        """Register a capability name."""
+        self._capabilities.add(name.strip())
+
+    def contains(self, name: str) -> bool:
+        """Return True if *name* is a registered capability."""
+        return name.strip() in self._capabilities
+
+    def is_empty(self) -> bool:
+        """Return True when no capabilities have been registered."""
+        return not self._capabilities
+
+
 class TemplateStore:
     def __init__(self) -> None:
         self._records: dict[tuple[str, str], TemplateRecord] = {}
@@ -94,8 +120,15 @@ class EmployeeStore:
         record.terminated_at = terminated_at
 
 
-def _validate_dpdl(raw: dict[str, Any]) -> tuple[bool, str | None]:
-    """Validate a parsed DPDL document. Returns (is_valid, error_message)."""
+def _validate_dpdl(raw: dict[str, Any], capability_registry: CapabilityRegistry | None = None) -> tuple[bool, str | None]:
+    """Validate a parsed DPDL document. Returns (is_valid, error_message).
+
+    Validation steps:
+    1. DPDL schema – required fields, types, and semantic version format.
+    2. Capability Registry – every capability name must exist in the registry
+       (skipped when the registry is absent or empty).
+    3. Guardrail syntax – each guardrail must be a string or a dict.
+    """
     for req in _DPDL_REQUIRED_FIELDS:
         if req not in raw or not raw[req]:
             return False, f"Missing required field: {req}"
@@ -118,6 +151,13 @@ def _validate_dpdl(raw: dict[str, Any]) -> tuple[bool, str | None]:
     for cap in caps:
         if not isinstance(cap, str) or not cap.strip():
             return False, "Each capability must be a non-empty string"
+
+    # Step 2: Capability Registry check (skipped when registry is absent or empty)
+    if capability_registry is not None and not capability_registry.is_empty():
+        for cap in caps:
+            cap_name = str(cap).strip()
+            if not capability_registry.contains(cap_name):
+                return False, f"Unknown capability: '{cap_name}' is not registered in the Capability Registry"
 
     guardrails = raw.get("guardrails", [])
     if not isinstance(guardrails, list):
@@ -154,10 +194,12 @@ class EmployeeRegistryApp:
         self,
         template_store: TemplateStore | None = None,
         employee_store: EmployeeStore | None = None,
+        capability_registry: CapabilityRegistry | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self._templates = template_store or TemplateStore()
         self._employees = employee_store or EmployeeStore()
+        self._capability_registry = capability_registry
         self._now = now or _utc_now
 
     def __call__(self, environ: dict[str, Any], start_response: Any) -> Iterable[bytes]:
@@ -212,7 +254,7 @@ class EmployeeRegistryApp:
         except UnicodeDecodeError:
             return json_response(start_response, "400 Bad Request", {"detail": "Request body must be UTF-8 encoded"})
 
-        is_valid, error_msg = _validate_dpdl(parsed)
+        is_valid, error_msg = _validate_dpdl(parsed, self._capability_registry)
         name = str(parsed.get("name", "")).strip()
         version = str(parsed.get("version", "")).strip()
         now_ts = _timestamp(self._now)
@@ -399,11 +441,17 @@ def _employee_detail(e: EmployeeRecord, template: TemplateRecord | None) -> dict
 def create_app(
     template_store: TemplateStore | None = None,
     employee_store: EmployeeStore | None = None,
+    capability_registry: CapabilityRegistry | None = None,
     signer: JWTSigner | None = None,
     now: Callable[[], datetime] | None = None,
 ) -> AuthMiddleware:
     return AuthMiddleware(
-        EmployeeRegistryApp(template_store=template_store, employee_store=employee_store, now=now),
+        EmployeeRegistryApp(
+            template_store=template_store,
+            employee_store=employee_store,
+            capability_registry=capability_registry,
+            now=now,
+        ),
         signer=signer or JWTSigner(),
         public_paths={"/health"},
     )
