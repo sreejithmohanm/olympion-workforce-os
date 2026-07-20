@@ -69,7 +69,7 @@ class CapabilityRegistry:
     """
 
     def __init__(self, capabilities: Iterable[str] | None = None) -> None:
-        self._capabilities: set[str] = {c.strip() for c in capabilities} if capabilities else set()
+        self._capabilities: set[str] = {c.strip() for c in (capabilities or [])}
 
     def register(self, name: str) -> None:
         """Register a capability name."""
